@@ -1,0 +1,20 @@
+# build
+/dist/
+/build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+
+# ambiente
+.venv/
+venv/
+.env
+.env.*
+
+# T0 — sessões NUNCA entram no git (dado de cliente, cifrado ou não)
+/sessions/
+sessions/
+
+# contratos reais são dado de instância (só exemplos sintéticos podem versionar)
+/contratos/*.yaml
+!/contratos/example.yaml
