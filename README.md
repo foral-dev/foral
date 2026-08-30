@@ -23,7 +23,7 @@ is small and auditable on purpose.
 pipx install foral            # or: npm i -g @foral/cli
 
 # to also sign in locally (foral login), add the browser extra, once:
-pipx install 'foral[login]'
+pipx install --include-deps 'foral[login]'
 playwright install chromium
 ```
 
