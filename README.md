@@ -30,19 +30,18 @@ playwright install chromium
 ## Quickstart
 
 ```bash
-# 1) the three things the runner needs — it is fail-closed and never guesses
-export FORAL_TENANT=your-org                       # isolates your sessions & contracts
-export SESSION_ENCRYPTION_KEY="$(foral keygen)"    # encrypts the saved session — keep it safe
-export CONTRATOS_DIR=~/foral/contracts             # where your contract YAML lives
+# point it at the contract you downloaded — first use configures itself (~/.foral)
+foral init ~/Downloads/acme.yaml
 
-# put the contract you downloaded from the sandbox here, named after the system:
-#   ~/foral/contracts/acme.yaml   →   foral serve acme   (lowercase)
-
-# 2) sign in once (opens your system's login in a browser; the session stays on this
-#    machine, ~30 days) and serve it as an MCP server
+# sign in once (opens your system's login in a browser; the encrypted session stays
+# on this machine, ~30 days) — then serve it as an MCP server
 foral login acme
-foral serve acme
+foral serve acme          # foral serve ~/Downloads/acme.yaml works too
 ```
+
+First use creates `~/.foral` by itself: a per-install tenant (random — never a shared
+literal), an encryption key (created once, owner-only) and the contract/session folders.
+No environment variables, nothing to edit.
 
 ## Point your agent at it
 
@@ -70,7 +69,8 @@ capabilities as typed tools.
 
 | Command | What it does |
 |---|---|
-| `foral serve <system>` | Serve the system's contract as an MCP server (stdio). |
+| `foral init [contract.yaml]` | One-time setup; validates and installs a downloaded contract. |
+| `foral serve <system\|contract.yaml>` | Serve the system's contract as an MCP server (stdio). |
 | `foral login <system>` | Sign in once; save the session locally, encrypted (~30 days). Needs `foral[login]`. |
 | `foral update <system> --from <url>` | Adopt a new contract version — validated before it is applied (fail-closed). |
 | `foral verify <system>` | Validate the contract and exit. |
@@ -91,14 +91,15 @@ capabilities as typed tools.
 - **Fail-closed by default.** An invalid contract does not load; a missing tenant is refused;
   a missing key is refused. Errors are explicit, never a silent, wrong success.
 
-## Environment
+## Environment (optional overrides — explicit always wins)
 
-| Variable | Required | Purpose |
+| Variable | Default | Purpose |
 |---|---|---|
-| `FORAL_TENANT` | serve, login | Isolates your sessions and contracts. No default (fail-closed). |
-| `SESSION_ENCRYPTION_KEY` | login, serve | Encrypts the saved session. Generate with `foral keygen`. |
-| `CONTRATOS_DIR` | serve, update | Directory holding `<system>.yaml`. |
-| `SESSION_DATA_DIR` | optional | Where sessions are stored (default `./sessions`). |
+| `FORAL_TENANT` | per-install random tenant (`~/.foral/tenant`) | Isolates sessions and contracts. |
+| `SESSION_ENCRYPTION_KEY` | per-install key (`~/.foral/key`, owner-only) | Encrypts the saved session. |
+| `CONTRATOS_DIR` | `~/.foral/contracts` | Directory holding `<system>.yaml`. |
+| `SESSION_DATA_DIR` | `~/.foral/sessions` | Where encrypted sessions are stored. |
+| `FORAL_HOME` | `~/.foral` | Moves the whole config home. |
 
 ## Development
 

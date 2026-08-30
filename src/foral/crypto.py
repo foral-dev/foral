@@ -18,10 +18,10 @@ def _get_encryption_key() -> bytes:
     """
     key = os.getenv("SESSION_ENCRYPTION_KEY")
     if not key:
-        raise RuntimeError(
-            "SESSION_ENCRYPTION_KEY não configurada. Sem ela, sessões NÃO PODEM ser "
-            "salvas ou lidas — falha explícita é melhor que gravar em texto puro."
-        )
+        # v0.4.0: chave POR INSTALAÇÃO em ~/.foral/key (gerada 1x, chmod 600). Segue
+        # fail-closed: se não der pra criar/ler a chave, levanta — nunca texto puro.
+        from foral import config as fc
+        key = fc.encryption_key()
     return key.encode()
 
 

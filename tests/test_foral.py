@@ -115,14 +115,81 @@ def test_comando_desconhecido_recusa():
     assert cli.main(["frobnicate"]) == 2
 
 
-def test_serve_sem_tenant_recusa(monkeypatch):
+def test_serve_sem_env_usa_tenant_por_instalacao(tmp_path, monkeypatch):
+    # v0.4.0: sem FORAL_TENANT o runner NÃO assume literal compartilhado — gera tenant
+    # ALEATÓRIO por instalação (FORAL_HOME/tenant) e segue. Falha só no contrato ausente.
     monkeypatch.delenv("FORAL_TENANT", raising=False)
-    assert cli.main(["serve", "acme"]) == 2               # fail-closed: sem tenant, não assume
+    monkeypatch.delenv("CONTRATOS_DIR", raising=False)
+    monkeypatch.setenv("FORAL_HOME", str(tmp_path))
+    assert cli.main(["serve", "acme"]) == 1               # contrato ausente (erro claro)
+    t = (tmp_path / "tenant").read_text().strip()
+    assert t.startswith("t-") and len(t) >= 8             # aleatório, nunca "default"
 
 
-def test_login_sem_tenant_recusa(monkeypatch):
+# ── config (v0.4.0): defaults por instalação, env sempre vence ───────────────
+from foral import config as fc
+
+
+def test_tenant_estavel_e_env_vence(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORAL_HOME", str(tmp_path))
     monkeypatch.delenv("FORAL_TENANT", raising=False)
-    assert cli.main(["login", "acme"]) == 2
+    t1, t2 = fc.tenant(), fc.tenant()
+    assert t1 == t2 and t1.startswith("t-")               # estável entre chamadas
+    monkeypatch.setenv("FORAL_TENANT", "org-x")
+    assert fc.tenant() == "org-x"                          # env vence
+
+
+def test_chave_gerada_600_estavel_e_fernet_valida(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORAL_HOME", str(tmp_path))
+    monkeypatch.delenv("SESSION_ENCRYPTION_KEY", raising=False)
+    k = fc.encryption_key()
+    assert fc.encryption_key() == k                        # estável
+    import os as _os, stat as _stat
+    assert _stat.S_IMODE(_os.stat(tmp_path / "key").st_mode) == 0o600
+    from cryptography.fernet import Fernet
+    Fernet(k.encode())                                     # chave válida
+
+
+def test_import_contract_valida_e_instala(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORAL_HOME", str(tmp_path))
+    import yaml as _y
+    p = tmp_path / "baixado.yaml"
+    p.write_text(_y.safe_dump(CONTRATO_OK))
+    assert fc.import_contract(str(p)) == "acme"
+    assert (tmp_path / "contracts" / "acme.yaml").exists()
+
+
+def test_import_contract_invalido_nao_instala(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORAL_HOME", str(tmp_path))
+    import yaml as _y
+    p = tmp_path / "ruim.yaml"
+    p.write_text(_y.safe_dump({**CONTRATO_OK, "dominios": ["*"]}))
+    with pytest.raises(Exception):
+        fc.import_contract(str(p))                         # inválido levanta ANTES de copiar
+    cdir = tmp_path / "contracts"
+    assert not cdir.exists() or not list(cdir.glob("*.yaml"))
+
+
+def test_resolve_system_nome_e_caminho(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORAL_HOME", str(tmp_path))
+    import yaml as _y
+    p = tmp_path / "acme.yaml"
+    p.write_text(_y.safe_dump(CONTRATO_OK))
+    assert fc.resolve_system(str(p)) == "acme"             # caminho → importa
+    assert (tmp_path / "contracts" / "acme.yaml").exists()
+    assert fc.resolve_system("acme") == "acme"             # nome puro passa direto
+
+
+def test_cli_init_instala_e_orienta(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORAL_HOME", str(tmp_path))
+    monkeypatch.delenv("FORAL_TENANT", raising=False)
+    monkeypatch.delenv("SESSION_ENCRYPTION_KEY", raising=False)
+    import yaml as _y
+    p = tmp_path / "acme.yaml"
+    p.write_text(_y.safe_dump(CONTRATO_OK))
+    assert cli.main(["init", str(p)]) == 0
+    err = capsys.readouterr().err
+    assert "contrato instalado: acme" in err and "foral login acme" in err
 
 
 def test_keygen_gera_chave_fernet_valida(capsys):

@@ -25,14 +25,17 @@ import urllib.request
 
 from foral.contract import Capacidade, Contrato, Escopo, ModoLeitura, carregar_contrato
 
-_CONTRATOS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "contratos")
 
 
 def contratos_dir() -> str:
     """O contrato REAL é dado de deployment, não do repo: `CONTRATOS_DIR` aponta o diretório
     (fora de qualquer git). Lida a cada chamada de propósito — a env pode mudar entre testes e
     o processo não precisa reiniciar para trocar de deployment."""
-    return os.getenv("CONTRATOS_DIR") or _CONTRATOS_DIR
+    env = os.getenv("CONTRATOS_DIR")
+    if env:
+        return env
+    from foral import config as fc
+    return fc.contracts_dir()
 
 
 def carregar_contrato_do_sistema(sistema: str) -> Contrato:
@@ -220,7 +223,11 @@ def _opener_seguro(hosts_ok: set[str], permitir_loopback: bool):
 def _caminho_sistema(tenant_id: str, sistema: str) -> str:
     """Onde a sessão cifrada do (tenant, sistema) vive na INSTÂNCIA do cliente
     (SESSION_DATA_DIR, fora de qualquer git)."""
-    d = os.path.join(os.getenv("SESSION_DATA_DIR", "./sessions"), tenant_id, sistema)
+    base = os.getenv("SESSION_DATA_DIR")
+    if not base:
+        from foral import config as fc
+        base = fc.sessions_dir()                 # absoluto e estável (não depende do cwd)
+    d = os.path.join(base, tenant_id, sistema)
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -230,7 +237,7 @@ def _cookies_da_sessao(tenant_id: str, sistema: str, dominio: str) -> str:
 
     state_path = os.path.join(_caminho_sistema(tenant_id, sistema), "state.json")
     if not os.path.exists(state_path):
-        raise RuntimeError(f"sem sessão salva para (tenant, {sistema}) — conecte pelo cartão")
+        raise RuntimeError(f"sem sessão salva para {sistema} — rode: foral login {sistema}")
     state = json.loads(decrypt_state(open(state_path, "rb").read()).decode("utf-8"))
     par = [
         f"{c['name']}={c['value']}"

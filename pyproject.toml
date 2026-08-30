@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "foral"
-version = "0.3.0"
+version = "0.4.0"
 description = "Foral — turn the systems you already run into typed, governed MCP capabilities for your AI agents. Runs on your infrastructure; reads only, writes stay human-approved."
 readme = "README.md"
 requires-python = ">=3.10"

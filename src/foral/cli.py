@@ -11,15 +11,17 @@ import sys
 USO = """foral — charters for software without public APIs
 
 uso:
-  foral serve <sistema>                serve o contrato como MCP server (stdio)
-  foral login <sistema>                loga no sistema e salva a sessão (local, ~30 dias)
+  foral init [contrato.yaml]           prepara a máquina (1x) e instala um contrato baixado
+  foral serve <sistema|contrato.yaml>  serve o contrato como MCP server (stdio)
+  foral login <sistema|contrato.yaml>  loga no sistema e salva a sessão (local, ~30 dias)
   foral update <sistema> --from <URL>  adota uma nova versão do contrato (fail-closed)
   foral verify <sistema>               valida o contrato (fail-closed) e sai
   foral keygen                         gera uma SESSION_ENCRYPTION_KEY nova
   foral --help
 
-env: FORAL_TENANT (obrigatório p/ serve/login) · CONTRATOS_DIR (onde vive o contrato) ·
-     SESSION_ENCRYPTION_KEY (cifra a sessão) · SESSION_DATA_DIR · FORAL_HOSTS_MAP (dev)
+Sem config: o primeiro uso se configura sozinho em ~/.foral (tenant por instalação, chave,
+contratos, sessões). env OPCIONAL (vence sempre; times/CI): FORAL_TENANT · CONTRATOS_DIR ·
+SESSION_ENCRYPTION_KEY · SESSION_DATA_DIR · FORAL_HOME · FORAL_HOSTS_MAP (dev)
 """
 
 
@@ -63,23 +65,52 @@ def main(argv=None) -> int:
         from cryptography.fernet import Fernet
         print(Fernet.generate_key().decode())
         return 0
-    # fail-closed (red-team 29/08): sem FORAL_TENANT explícito, NÃO assumir um tenant
-    # genérico compartilhável — dois clientes cairiam no mesmo store de sessão.
-    tenant_id = os.getenv("FORAL_TENANT")
-    if cmd in ("serve", "login") and not tenant_id:
-        sys.stderr.write("FORAL_TENANT ausente — defina o tenant explicitamente (fail-closed)\n")
-        return 2
+    if cmd == "init":
+        # v0.4.0 zero-fricção: prepara ~/.foral e, com argumento, valida+instala um contrato
+        # baixado. Idempotente. Inválido → nada é instalado (fail-closed).
+        from foral import config as fc
+        sistema = None
+        if resto:
+            try:
+                sistema = fc.resolve_system(resto[0])
+            except Exception as e:
+                sys.stderr.write(f"contrato inválido/ausente — nada instalado: {e}\n")
+                return 1
+        t = fc.tenant()
+        fc.encryption_key()
+        sys.stderr.write(f"✓ pronto — tenant {t} · contratos: {fc.contracts_dir()} · "
+                         f"sessões: {fc.sessions_dir()}\n")
+        if sistema:
+            sys.stderr.write(f"✓ contrato instalado: {sistema}\n"
+                             f"  agora: foral login {sistema}   (e depois: foral serve {sistema})\n")
+        else:
+            sys.stderr.write("  instale um contrato: foral init ~/Downloads/<sistema>.yaml\n")
+        return 0
+    # tenant: env vence; sem env, o POR-INSTALAÇÃO de ~/.foral (aleatório — nunca um literal
+    # compartilhado entre clientes; o fail-closed do red-team 29/08 segue de pé no espírito).
+    from foral import config as _fc
+    tenant_id = os.getenv("FORAL_TENANT") or _fc.tenant()
     if cmd == "serve":
         if not resto:
-            sys.stderr.write("uso: foral serve <sistema>\n")
+            sys.stderr.write("uso: foral serve <sistema|contrato.yaml>\n")
             return 2
-        return _serve(resto[0], tenant_id)
+        try:
+            sistema = _fc.resolve_system(resto[0])
+        except Exception as e:
+            sys.stderr.write(f"contrato inválido/ausente: {e}\n")
+            return 1
+        return _serve(sistema, tenant_id)
     if cmd == "login":
         if not resto:
-            sys.stderr.write("uso: foral login <sistema>\n")
+            sys.stderr.write("uso: foral login <sistema|contrato.yaml>\n")
             return 2
+        try:
+            sistema = _fc.resolve_system(resto[0])
+        except Exception as e:
+            sys.stderr.write(f"contrato inválido/ausente: {e}\n")
+            return 1
         from foral.login import login
-        return login(resto[0], tenant_id)
+        return login(sistema, tenant_id)
     if cmd == "update":
         if not resto:
             sys.stderr.write("uso: foral update <sistema> --from <URL>\n")

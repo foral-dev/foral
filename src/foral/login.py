@@ -14,7 +14,11 @@ import time
 
 
 def _caminho_sistema(tenant_id: str, sistema: str) -> str:
-    d = os.path.join(os.getenv("SESSION_DATA_DIR", "./sessions"), tenant_id, sistema)
+    base = os.getenv("SESSION_DATA_DIR")
+    if not base:
+        from foral import config as fc
+        base = fc.sessions_dir()
+    d = os.path.join(base, tenant_id, sistema)
     os.makedirs(d, exist_ok=True)
     return d
 
